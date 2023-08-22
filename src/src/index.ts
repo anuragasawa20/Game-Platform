@@ -30,11 +30,20 @@ type GamePayload = Record<{
   avatar: string; // URL of the game's avatar image
 }>;
 
-const gameStorage = new StableBTreeMap<string, Game>(0, 44, 1024);
+const gameStorage: Readonly<StableBTreeMap<string, Game>> = new StableBTreeMap<string, Game>(0, 44, 1024);
 
 export function addGame(payload: GamePayload): Result<Game, string> {
+  if (!ic.isPrincipal(ic.caller())) {
+    return Result.Err<Game, string>(`Only principals can add games.`);
+  }
+
+  const existingGame = gameStorage.get(payload.id);
+  if (existingGame !== null) {
+    return Result.Err<Game, string>(`A game with id=${payload.id} already exists.`);
+  }
+
   const game: Game = {
-    id: uuidv4(),
+    id: payload.id, // Use the specified ID
     createdAt: ic.time(),
     updatedAt: Opt.None,
     owner: ic.caller(),
@@ -42,9 +51,15 @@ export function addGame(payload: GamePayload): Result<Game, string> {
     ...payload,
   };
 
-  gameStorage.insert(game.id, game);
-  return Result.Ok(game);
+  try {
+    gameStorage.insert(game.id, game);
+    return Result.Ok(game);
+  } catch (error) {
+    return Result.Err<Game, string>(`Failed to add game: ${error}`);
+  }
 }
+
+
 
 export function updateGame(
   id: string,
@@ -55,6 +70,12 @@ export function updateGame(
       if (ic.caller().toString() !== game.owner.toString()) {
         return Result.Err<Game, string>(
           `You are not authorized to update the game.`
+        );
+      }
+
+      if (!payload.title || !payload.description || !payload.avatar) {
+        return Result.Err<Game, string>(
+          `Title, description, and avatar are required fields for the update.`
         );
       }
 
@@ -81,6 +102,10 @@ export function addMembersToGame(
     Some: (game: Game) => {
       if (ic.caller().toString() !== game.owner.toString()) {
         return Result.Err<Game, string>(`You are not the owner of the game.`);
+      }
+
+      if (game.members.map(String).includes(member.toString())) {
+        return Result.Err<Game, string>(`The specified member is already a member of the game.`);
       }
 
       game.members.push(member);
