@@ -1,0 +1,24 @@
+type Game = record {
+  id : text;
+  title : text;
+  members : vec principal;
+  messages : vec text;
+  owner : principal;
+  createdAt : nat64;
+  description : text;
+  updatedAt : opt nat64;
+  avatar : text;
+};
+type GamePayload = record { title : text; description : text; avatar : text };
+type _AzleResult = variant { Ok : Game; Err : text };
+type _AzleResult_1 = variant { Ok : text; Err : text };
+type _AzleResult_2 = variant { Ok : vec text; Err : text };
+service : () -> {
+  addGame : (GamePayload) -> (_AzleResult);
+  addMembersToGame : (text, principal) -> (_AzleResult);
+  deleteGame : (text) -> (_AzleResult_1);
+  deleteMessage : (text, text) -> (_AzleResult_1);
+  getMessagesForGame : (text) -> (_AzleResult_2) query;
+  sendMessage : (text, text) -> (_AzleResult);
+  updateGame : (text, GamePayload) -> (_AzleResult);
+}
