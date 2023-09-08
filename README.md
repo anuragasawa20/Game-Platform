@@ -1,6 +1,5 @@
-# ICP-azle-chatroom
-
-Hello, this is a simple chatroom created using azle. It's pretty straightforward to test. The functions are mostly self explanatory
+# ICP-azle-Game platform
+Hello, this is a simple GamePlatform created using azle. It's pretty straightforward to test. The functions are mostly self explanatory
 
 ## How to test
 1. Click on codespaces, create one for this project
@@ -10,4 +9,4 @@ Hello, this is a simple chatroom created using azle. It's pretty straightforward
 5. Then run `dfx deploy`. It will take a while
 6. A link will be generated. Go to that link and test all the functions
 
-Have fun!
+Hope you will enjoy also improve it

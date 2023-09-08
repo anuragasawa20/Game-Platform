@@ -20,6 +20,7 @@ type Game = Record<{
   avatar: string; // URL of the game's avatar image
   owner: Principal; // Owner of the game
   members: Vec<Principal>; // Array of game members
+  messages: Vec<string>; // Array of message IDs
   createdAt: nat64; // Timestamp of when the game was created
   updatedAt: Opt<nat64>; // Optional timestamp of when the game was last updated
 }>;
@@ -38,24 +39,39 @@ type Message = Record<{
 
 const gameStorage = new StableBTreeMap<string, Game>(0, 44, 1024);
 
+$update;
 export function addGame(payload: GamePayload): Result<Game, string> {
+  if (!payload.title || !payload.description || !payload.avatar) {
+    return Result.Err("Invalid payload");
+  }
+
   const game: Game = {
     id: uuidv4(),
     createdAt: ic.time(),
     updatedAt: Opt.None,
     owner: ic.caller(),
     members: [ic.caller()],
+    messages: [],
     ...payload,
   };
 
-  gameStorage.insert(game.id, game);
-  return Result.Ok(game);
+  try {
+    gameStorage.insert(game.id, game);
+    return Result.Ok(game);
+  } catch (error) {
+    return Result.Err("Failed to add game");
+  }
 }
 
+$update;
 export function updateGame(
   id: string,
   payload: GamePayload
 ): Result<Game, string> {
+  if (!payload.title || !payload.description || !payload.avatar) {
+    return Result.Err("Invalid payload");
+  }
+
   return match(gameStorage.get(id), {
     Some: (game: Game) => {
       if (ic.caller().toString() !== game.owner.toString()) {
@@ -69,6 +85,7 @@ export function updateGame(
         ...payload,
         updatedAt: Opt.Some(ic.time()),
       };
+
       gameStorage.insert(game.id, updatedGame);
       return Result.Ok<Game, string>(updatedGame);
     },
@@ -79,6 +96,7 @@ export function updateGame(
   });
 }
 
+$update;
 export function addMembersToGame(
   id: string,
   member: Principal
@@ -89,7 +107,14 @@ export function addMembersToGame(
         return Result.Err<Game, string>(`You are not the owner of the game.`);
       }
 
-      game.members.push(member);
+      if (game.members.includes(member)) {
+        return Result.Err<Game, string>(
+          `Member is already a member of the game.`
+        );
+      }
+
+      const updatedMembers = [...game.members, member];
+      game.members = updatedMembers;
       gameStorage.insert(game.id, game);
       return Result.Ok<Game, string>(game);
     },
@@ -100,6 +125,7 @@ export function addMembersToGame(
   });
 }
 
+$update;
 export function deleteGame(id: string): Result<string, string> {
   return match(gameStorage.get(id), {
     Some: (game: Game) => {
@@ -114,18 +140,19 @@ export function deleteGame(id: string): Result<string, string> {
     },
     None: () => {
       return Result.Err<string, string>(
-        `couldn't delete a game with id=${id}. game not found`
+        `Couldn't delete a game with id=${id}. Game not found.`
       );
     },
   });
 }
 
 $update;
-// Send a message to a gaming Place
-export function sendMessage(payload: GamePayload): Result<Game, string> {
-  return match(gameStorage.get(payload.gameId), {
-    Some: (game: game) => {
-      // Confirm only members of game can call this function
+export function sendMessage(
+  gameId: string,
+  setMessage: string
+): Result<Game, string> {
+  return match(gameStorage.get(gameId), {
+    Some: (game) => {
       const isMember = game.members
         .map(String)
         .includes(ic.caller().toString());
@@ -133,14 +160,15 @@ export function sendMessage(payload: GamePayload): Result<Game, string> {
         return Result.Err<Game, string>(`You don't belong to this game.`);
       }
 
-      const message = { sender: ic.caller(), id: uuidv4(), ...payload }; // Create the message payload
-      gameStorage.insert(message.id, message); // Store the message in the message storage
-      return Result.Ok<Game, string>(message);
+      const message = { sender: ic.caller(), id: uuidv4(), setMessage };
+
+      const updatedGame = { ...game };
+      updatedGame.messages.push(message.id);
+      gameStorage.insert(updatedGame.id, updatedGame);
+      return Result.Ok<Game, string>(updatedGame);
     },
     None: () =>
-      Result.Err<Game, string>(
-        `A game with id=${payload.gameId} was not found.`
-      ),
+      Result.Err<Game, string>(`A game with id=${gameId} was not found.`),
   });
 }
 
@@ -180,58 +208,51 @@ export function getMessagesForGame(
 
 export function getMessagesForgame(gameId: string): Result<Vec<Game>, string> {
   return match(gameStorage.get(gameId), {
-    Some: (game: game) => {
-      // Confirm only members of game can call this function
+    Some: (game: Game) => {
       const isMember = game.members
         .map(String)
         .includes(ic.caller().toString());
       if (!isMember) {
-        return Result.Err<Game[], string>(`You don't belong to this game.`);
+        return Result.Err<Vec<string>, string>(
+          `You don't belong to this game.`
+        );
       }
 
-      const messages = gameStorage.values(); // get all the messages
-      const returnedMessages: Game[] = [];
-
-      for (const message of messages) {
-        if (message.gameId === gameId) {
-          returnedMessages.push(message); // filter messages for that game only
-        }
-      }
-
-      return Result.Ok<Game[], string>(returnedMessages);
+      return Result.Ok<Vec<string>, string>(game.messages);
     },
-    None: () => {
-      return Result.Err<Game[], string>(
+
+    None: () =>
+      Result.Err<Vec<string>, string>(
         `A game with id=${gameId} was not found.`
-      );
-    },
+      ),
   });
 }
 
 $update;
-// Delete a message
-export function deleteMessage(id: string): Result<string, string> {
-  return match(gameStorage.get(id), {
-    Some: (message: Message) => {
-      // Confirm only the owner of the message can call this function
-      if (ic.caller().toString() !== message.sender.toString()) {
+export function deleteMessage(
+  gameId: string,
+  messageId: string
+): Result<string, string> {
+  return match(gameStorage.get(gameId), {
+    Some: (game: Game) => {
+      if (ic.caller().toString() !== game.owner.toString()) {
         return Result.Err<string, string>(
           `You are not authorized to delete this message.`
         );
       }
-      gameStorage.remove(id); // Remove the message from the message storage
-      return Result.Ok<string, string>(`Message ${id} deleted successfully.`);
+      game.messages = game.messages.filter((message) => message !== messageId);
+      return Result.Ok<string, string>(
+        `Message ${messageId} deleted successfully`
+      );
     },
     None: () => {
-      return Result.Err<string, string>(
-        `Couldn't delete a message with id=${id}. Message not found.`
-      );
+      return Result.Err<string, string>(`Game with id=${gameId} not found.`);
     },
   });
 }
 
-// a workaround to make uuid package work with Azle
 globalThis.crypto = {
+  //@ts-ignore
   getRandomValues: () => {
     let array = new Uint8Array(32);
 

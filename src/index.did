@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 type Message = record {
   id : text;
   sender : principal;
@@ -9,12 +10,20 @@ type Room = record {
   id : text;
   title : text;
   members : vec principal;
+=======
+type Game = record {
+  id : text;
+  title : text;
+  members : vec principal;
+  messages : vec text;
+>>>>>>> 103d358c967a0d10d3eb63a2173ba0f4997006f5
   owner : principal;
   createdAt : nat64;
   description : text;
   updatedAt : opt nat64;
   avatar : text;
 };
+<<<<<<< HEAD
 type RoomPayload = record { title : text; description : text; avatar : text };
 type _AzleResult = variant { Ok : Room; Err : text };
 type _AzleResult_1 = variant { Ok : text; Err : text };
@@ -31,4 +40,18 @@ service : () -> {
   getRoomsForUser : () -> (_AzleResult_3) query;
   sendMessage : (MessagePayload) -> (_AzleResult_4);
   updateRoom : (text, RoomPayload) -> (_AzleResult);
+=======
+type GamePayload = record { title : text; description : text; avatar : text };
+type _AzleResult = variant { Ok : Game; Err : text };
+type _AzleResult_1 = variant { Ok : text; Err : text };
+type _AzleResult_2 = variant { Ok : vec text; Err : text };
+service : () -> {
+  addGame : (GamePayload) -> (_AzleResult);
+  addMembersToGame : (text, principal) -> (_AzleResult);
+  deleteGame : (text) -> (_AzleResult_1);
+  deleteMessage : (text, text) -> (_AzleResult_1);
+  getMessagesForGame : (text) -> (_AzleResult_2) query;
+  sendMessage : (text, text) -> (_AzleResult);
+  updateGame : (text, GamePayload) -> (_AzleResult);
+>>>>>>> 103d358c967a0d10d3eb63a2173ba0f4997006f5
 }
