@@ -30,6 +30,12 @@ type GamePayload = Record<{
   avatar: string; // URL of the game's avatar image
 }>;
 
+type Message = Record<{
+  id: string;
+  content: string;
+  sender: string;
+}>;
+
 const gameStorage = new StableBTreeMap<string, Game>(0, 44, 1024);
 
 export function addGame(payload: GamePayload): Result<Game, string> {
@@ -140,6 +146,38 @@ export function sendMessage(payload: GamePayload): Result<Game, string> {
 
 $query;
 // Retrieve messages for a game
+export function getMessagesForGame(
+  gameId: string
+): Result<Vec<Message>, string> {
+  return match(gameStorage.get(gameId), {
+    Some: (game: Game) => {
+      // Confirm only members of the game can call this function
+      const isMember = game.members
+        .map(String)
+        .includes(ic.caller().toString());
+      if (!isMember) {
+        return Result.Err<Message[], string>(`You don't belong to this game.`);
+      }
+
+      const messages = gameStorage.values(); // Get all the messages
+      const returnedMessages: Message[] = [];
+
+      for (const message of messages) {
+        if (message.gameId === gameId) {
+          returnedMessages.push(message); // Filter messages for that game only
+        }
+      }
+
+      return Result.Ok<Message[], string>(returnedMessages);
+    },
+    None: () => {
+      return Result.Err<Message[], string>(
+        `A game with id=${gameId} was not found.`
+      );
+    },
+  });
+}
+
 export function getMessagesForgame(gameId: string): Result<Vec<Game>, string> {
   return match(gameStorage.get(gameId), {
     Some: (game: game) => {
@@ -174,19 +212,19 @@ $update;
 // Delete a message
 export function deleteMessage(id: string): Result<string, string> {
   return match(gameStorage.get(id), {
-    Some: (Game: Game) => {
-      // Confirm only owner of message can call this function
-      if (ic.caller().toString() !== Game.sender.toString()) {
+    Some: (message: Message) => {
+      // Confirm only the owner of the message can call this function
+      if (ic.caller().toString() !== message.sender.toString()) {
         return Result.Err<string, string>(
           `You are not authorized to delete this message.`
         );
       }
       gameStorage.remove(id); // Remove the message from the message storage
-      return Result.Ok<string, string>(`game ${id} deleted successfully`);
+      return Result.Ok<string, string>(`Message ${id} deleted successfully.`);
     },
     None: () => {
       return Result.Err<string, string>(
-        `couldn't delete a message with id=${id}. message not found`
+        `Couldn't delete a message with id=${id}. Message not found.`
       );
     },
   });
